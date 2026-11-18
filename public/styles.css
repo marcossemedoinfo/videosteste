@@ -169,6 +169,43 @@ code {
   border-color: var(--primary);
 }
 
+.hero-actions {
+  display: flex;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+
+.add-link-shell {
+  max-width: 500px;
+}
+
+.add-link-body {
+  padding: 1.25rem;
+}
+
+.stack-form .inline-check {
+  flex-direction: row;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.stack-form .inline-check input {
+  width: auto;
+}
+
+.channel-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+}
+
+.btn-icon.mini {
+  width: 24px;
+  height: 24px;
+  border-radius: 6px;
+  font-size: 0.72rem;
+}
+
 /* Container & Hero */
 .container {
   max-width: 1360px;

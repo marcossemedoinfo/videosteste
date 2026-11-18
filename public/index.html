@@ -58,6 +58,7 @@
         </p>
       </div>
       <div class="hero-actions">
+        <button class="btn btn-primary" id="openAddLinkBtn" type="button">➕ Adicionar Link</button>
         <button class="btn btn-secondary" id="refreshAllBtn" type="button">↻ Atualizar Agora</button>
       </div>
     </section>
@@ -93,6 +94,7 @@
       <div class="toolbar">
         <div class="filter-group">
           <button class="chip channel-filter-chip active" data-channel-filter="all" type="button">Todos</button>
+          <button class="chip channel-filter-chip" data-channel-filter="custom" type="button">📌 Meus Links</button>
           <button class="chip channel-filter-chip" data-channel-filter="favorites" type="button">★ Favoritos</button>
           <button class="chip channel-filter-chip" data-channel-filter="sports" type="button">⚽ Esportes</button>
           <button class="chip channel-filter-chip" data-channel-filter="movies" type="button">🎬 Filmes</button>
@@ -185,6 +187,43 @@
       </div>
     </section>
   </main>
+
+  <!-- MODAL ADICIONAR LINK MANUAL -->
+  <div id="addLinkModal" class="player-modal hidden" role="dialog" aria-modal="true" aria-labelledby="addLinkModalTitle">
+    <div class="player-backdrop" id="closeAddLinkBackdrop"></div>
+    <div class="player-shell add-link-shell">
+      <div class="player-header">
+        <div class="player-title-wrap">
+          <div>
+            <h2 id="addLinkModalTitle">➕ Adicionar Link de Vídeo</h2>
+            <p class="player-subtitle">Cole uma URL direta (.m3u8 ou .mp4) para abrir no player e salvar no seu navegador.</p>
+          </div>
+        </div>
+        <button id="closeAddLinkBtn" class="btn-icon" type="button" aria-label="Fechar janela">✕</button>
+      </div>
+      <div class="add-link-body">
+        <form id="addLinkForm" class="stack-form">
+          <label>
+            Nome do Canal / Vídeo
+            <input id="addLinkTitle" type="text" placeholder="Ex: Meu Stream de Teste" required />
+          </label>
+          <label>
+            Categoria
+            <input id="addLinkGroup" type="text" value="Meus Links" placeholder="Ex: Meus Links" />
+          </label>
+          <label>
+            URL do Stream (.m3u8 / .mp4)
+            <input id="addLinkUrl" type="url" placeholder="https://.../playlist.m3u8" required />
+          </label>
+          <label class="toggle-label inline-check">
+            <input type="checkbox" id="addLinkSaveToggle" checked />
+            <span>Salvar na aba "Canais IPTV" (localStorage)</span>
+          </label>
+          <button class="btn btn-primary" type="submit">Abrir no Player</button>
+        </form>
+      </div>
+    </div>
+  </div>
 
   <!-- MODAL DO PLAYER AO VIVO (ESTILO STREAMING) -->
   <div id="playerModal" class="player-modal hidden" role="dialog" aria-modal="true" aria-labelledby="playerModalTitle">

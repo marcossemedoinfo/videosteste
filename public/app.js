@@ -7,6 +7,7 @@ const STORAGE_KEYS = {
   playlists: 'futstream_playlists_v1',
   favorites: 'futstream_favorites_v1',
   localRawM3u: 'futstream_local_m3u_v1',
+  customChannels: 'futstream_custom_channels_v1',
 };
 
 const DEFAULT_PLAYLISTS = [
@@ -93,6 +94,7 @@ const DEFAULT_PLAYLISTS = [
 ];
 
 const CHANNEL_FILTER_KEYWORDS = {
+  custom: 'meus links',
   sports: 'sport',
   movies: 'movie',
   series: 'series',
@@ -136,6 +138,7 @@ const state = {
   isLoadingPlaylists: true,
   playlists: mergeBuiltInPlaylists(loadStoredJson(STORAGE_KEYS.playlists, DEFAULT_PLAYLISTS)),
   localRawLists: loadStoredJson(STORAGE_KEYS.localRawM3u, []),
+  customChannels: loadStoredJson(STORAGE_KEYS.customChannels, []),
   favorites: new Set(loadStoredJson(STORAGE_KEYS.favorites, [])),
   hlsInstance: null,
   currentStreamUrl: '',
@@ -461,6 +464,9 @@ function mergeChannelsIntoMap(channelMap, parsedChannels) {
       channelMap.set(ch.url, ch);
       continue;
     }
+    if (ch.isCustom) {
+      existing.isCustom = true;
+    }
     for (const tag of ch.sourceTags) {
       if (!existing.sourceTags.includes(tag)) {
         existing.sourceTags.push(tag);
@@ -480,6 +486,21 @@ async function loadAllPlaylists() {
       return parseM3U(text, pl.tag || 'custom', pl.name);
     })
   );
+
+  const customMapped = state.customChannels
+    .filter((c) => isSafeHttpUrl(c.url))
+    .map((c) => ({
+      id: `custom:${c.url}`,
+      name: c.name || 'Meu Link',
+      logo: '',
+      group: c.group || 'Meus Links',
+      tvgId: '',
+      sourceTags: ['custom'],
+      url: c.url,
+      isHttps: c.url.startsWith('https://'),
+      isCustom: true,
+    }));
+  mergeChannelsIntoMap(channelMap, customMapped);
 
   for (const res of fetched) {
     if (res.status === 'fulfilled') {
@@ -565,13 +586,19 @@ function renderChannels() {
         </div>
         <div class="channel-card-bottom">
           <span class="proto-pill ${ch.isHttps ? 'https' : 'http'}">${ch.isHttps ? 'HTTPS' : 'HTTP (VLC)'}</span>
-          <button
-            class="fav-btn ${isFav ? 'active' : ''}"
-            type="button"
-            data-fav-url="${escapeHtml(ch.url)}"
-            title="Favoritar canal"
-            aria-label="Favoritar ${escapeHtml(ch.name)}"
-          >${isFav ? '★' : '☆'}</button>
+          <div class="channel-actions">
+            ${ch.isCustom
+              ? `<button class="btn-icon mini" type="button" data-delete-custom-url="${escapeHtml(ch.url)}" title="Remover link" aria-label="Remover ${escapeHtml(ch.name)}">✕</button>`
+              : ''
+            }
+            <button
+              class="fav-btn ${isFav ? 'active' : ''}"
+              type="button"
+              data-fav-url="${escapeHtml(ch.url)}"
+              title="Favoritar canal"
+              aria-label="Favoritar ${escapeHtml(ch.name)}"
+            >${isFav ? '★' : '☆'}</button>
+          </div>
         </div>
       </article>
     `;
@@ -906,8 +933,18 @@ function setupEventListeners() {
     renderChannels();
   });
 
-  // Clique em canal ou favorito
-  document.getElementById('channelsGrid').addEventListener('click', (e) => {
+  // Clique em canal, remover link ou favorito
+  document.getElementById('channelsGrid').addEventListener('click', async (e) => {
+    const delBtn = e.target.closest('[data-delete-custom-url]');
+    if (delBtn) {
+      e.stopPropagation();
+      const targetUrl = delBtn.dataset.deleteCustomUrl;
+      state.customChannels = state.customChannels.filter((c) => c.url !== targetUrl);
+      saveStoredJson(STORAGE_KEYS.customChannels, state.customChannels);
+      await loadAllPlaylists();
+      return;
+    }
+
     const favBtn = e.target.closest('[data-fav-url]');
     if (favBtn) {
       e.stopPropagation();
@@ -991,12 +1028,56 @@ function setupEventListeners() {
     }
   });
 
+  // Modal Adicionar Link Manual
+  const addLinkModal = document.getElementById('addLinkModal');
+  const closeAddLink = () => addLinkModal.classList.add('hidden');
+
+  document.getElementById('openAddLinkBtn').addEventListener('click', () => {
+    addLinkModal.classList.remove('hidden');
+    document.getElementById('addLinkTitle').focus();
+  });
+  document.getElementById('closeAddLinkBtn').addEventListener('click', closeAddLink);
+  document.getElementById('closeAddLinkBackdrop').addEventListener('click', closeAddLink);
+
+  document.getElementById('addLinkForm').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const title = document.getElementById('addLinkTitle').value.trim() || 'Meu Link';
+    const group = document.getElementById('addLinkGroup').value.trim() || 'Meus Links';
+    const url = document.getElementById('addLinkUrl').value.trim();
+    const shouldSave = document.getElementById('addLinkSaveToggle').checked;
+    if (!isSafeHttpUrl(url)) return;
+
+    const channelObj = {
+      name: title,
+      group,
+      url,
+      isHttps: url.startsWith('https://'),
+      isCustom: true,
+    };
+
+    if (shouldSave) {
+      const exists = state.customChannels.some((c) => c.url === url);
+      if (!exists) {
+        state.customChannels.unshift({ name: title, group, url });
+        saveStoredJson(STORAGE_KEYS.customChannels, state.customChannels);
+      }
+      await loadAllPlaylists();
+    }
+
+    e.target.reset();
+    document.getElementById('addLinkGroup').value = 'Meus Links';
+    document.getElementById('addLinkSaveToggle').checked = true;
+    closeAddLink();
+    openChannelPlayer(channelObj);
+  });
+
   // Player modal controls
   document.getElementById('closePlayerBtn').addEventListener('click', closePlayer);
   document.getElementById('closePlayerBackdrop').addEventListener('click', closePlayer);
   document.addEventListener('keydown', (e) => {
-    if (e.key === 'Escape' && !document.getElementById('playerModal').classList.contains('hidden')) {
-      closePlayer();
+    if (e.key === 'Escape') {
+      if (!document.getElementById('playerModal').classList.contains('hidden')) closePlayer();
+      if (!addLinkModal.classList.contains('hidden')) closeAddLink();
     }
   });
 
