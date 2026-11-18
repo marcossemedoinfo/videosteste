@@ -1,0 +1,247 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>FutStream — Jogos ao Vivo &amp; IPTV Player</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Outfit:wght@600;700;800&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="styles.css" />
+  <script src="https://cdn.jsdelivr.net/npm/hls.js@1.5.18/dist/hls.min.js" defer></script>
+  <script src="app.js" defer></script>
+</head>
+<body>
+  <header class="topbar">
+    <div class="topbar-inner">
+      <div class="brand" role="banner">
+        <div class="brand-logo" aria-hidden="true">▶</div>
+        <div>
+          <span class="brand-name">FutStream</span>
+          <span class="brand-tag">Guia de Jogos &amp; TV ao Vivo</span>
+        </div>
+      </div>
+
+      <nav class="main-nav" aria-label="Navegação principal">
+        <button class="nav-btn active" data-tab="matches" type="button">
+          ⚽ Jogos do Dia
+          <span class="nav-badge" id="liveCountBadge">0</span>
+        </button>
+        <button class="nav-btn" data-tab="channels" type="button">
+          📺 Canais IPTV
+          <span class="nav-badge muted" id="channelCountBadge">0</span>
+        </button>
+        <button class="nav-btn" data-tab="playlists" type="button">
+          ⚙️ Minhas Listas
+        </button>
+      </nav>
+
+      <div class="search-wrap">
+        <input
+          id="globalSearch"
+          type="search"
+          placeholder="Buscar time, campeonato ou canal..."
+          aria-label="Buscar time, campeonato ou canal"
+        />
+      </div>
+    </div>
+  </header>
+
+  <main class="container">
+    <!-- Banner informativo -->
+    <section class="hero-strip" aria-label="Resumo">
+      <div class="hero-text">
+        <h1>Central de Jogos &amp; Canais Abertos</h1>
+        <p>
+          Acompanhe placares em tempo real, veja onde cada jogo passa e assista a canais IPTV
+          abertos (<code>iptv-org</code>) ou adicione suas próprias listas <code>.m3u / .m3u8</code>.
+        </p>
+      </div>
+      <div class="hero-actions">
+        <button class="btn btn-secondary" id="refreshAllBtn" type="button">↻ Atualizar Agora</button>
+      </div>
+    </section>
+
+    <!-- ABA 1: JOGOS DO DIA -->
+    <section id="tab-matches" class="tab-panel active" aria-label="Jogos do dia">
+      <div class="toolbar">
+        <div class="filter-group" role="group" aria-label="Filtrar data">
+          <button class="chip date-chip" data-date-offset="-1" type="button">Ontem</button>
+          <button class="chip date-chip active" data-date-offset="0" type="button">Hoje</button>
+          <button class="chip date-chip" data-date-offset="1" type="button">Amanhã</button>
+        </div>
+
+        <div class="filter-group" role="group" aria-label="Filtrar status">
+          <button class="chip status-chip active" data-status="all" type="button">Todos</button>
+          <button class="chip status-chip" data-status="in" type="button">🔴 Ao Vivo</button>
+          <button class="chip status-chip" data-status="pre" type="button">🕒 Próximos</button>
+          <button class="chip status-chip" data-status="post" type="button">✓ Encerrados</button>
+        </div>
+
+        <select id="leagueFilter" class="select-input" aria-label="Filtrar por campeonato">
+          <option value="all">Todos os campeonatos</option>
+        </select>
+      </div>
+
+      <div id="matchesGrid" class="matches-grid">
+        <div class="skeleton-state">Carregando jogos do dia...</div>
+      </div>
+    </section>
+
+    <!-- ABA 2: CANAIS IPTV -->
+    <section id="tab-channels" class="tab-panel" aria-label="Canais IPTV">
+      <div class="toolbar">
+        <div class="filter-group">
+          <button class="chip channel-filter-chip active" data-channel-filter="all" type="button">Todos</button>
+          <button class="chip channel-filter-chip" data-channel-filter="favorites" type="button">★ Favoritos</button>
+          <button class="chip channel-filter-chip" data-channel-filter="sports" type="button">⚽ Esportes</button>
+          <button class="chip channel-filter-chip" data-channel-filter="br" type="button">🇧🇷 Brasil</button>
+        </div>
+
+        <select id="categoryFilter" class="select-input" aria-label="Filtrar por categoria">
+          <option value="all">Todas as categorias</option>
+        </select>
+
+        <label class="toggle-label" title="Links http:// puros são bloqueados pelos navegadores em sites https://">
+          <input type="checkbox" id="httpsOnlyToggle" checked />
+          <span>Apenas HTTPS (compatível com navegador)</span>
+        </label>
+      </div>
+
+      <div id="channelsInfoBar" class="info-bar"></div>
+      <div id="channelsGrid" class="channels-grid">
+        <div class="skeleton-state">Carregando listas IPTV públicas...</div>
+      </div>
+      <div class="load-more-wrap">
+        <button id="loadMoreChannelsBtn" class="btn btn-secondary hidden" type="button">Carregar mais canais</button>
+      </div>
+    </section>
+
+    <!-- ABA 3: MINHAS LISTAS & STREAM DIRETO -->
+    <section id="tab-playlists" class="tab-panel" aria-label="Gerenciar listas M3U">
+      <div class="playlists-layout">
+        <div class="card-panel">
+          <h2>➕ Adicionar Lista .M3U / .M3U8</h2>
+          <p class="muted-text">
+            Cole a URL de uma lista <code>.m3u</code> pública ou adicione um link direto <code>.m3u8</code>.
+            Tudo fica salvo apenas no seu navegador (<code>localStorage</code>).
+          </p>
+
+          <form id="addPlaylistForm" class="stack-form">
+            <label>
+              Nome da Lista
+              <input id="playlistNameInput" type="text" placeholder="Ex: Minha Lista Esportes" required />
+            </label>
+            <label>
+              URL da Lista (.m3u ou .m3u8)
+              <input id="playlistUrlInput" type="url" placeholder="https://exemplo.com/lista.m3u" required />
+            </label>
+            <button class="btn btn-primary" type="submit">Salvar e Carregar Lista</button>
+          </form>
+
+          <hr class="divider" />
+
+          <h3>▶ Testar / Abrir Stream Direto (.m3u8)</h3>
+          <form id="directStreamForm" class="stack-form">
+            <label>
+              Título (opcional)
+              <input id="directStreamTitle" type="text" placeholder="Ex: Canal Teste Ao Vivo" />
+            </label>
+            <label>
+              URL do Vídeo (.m3u8 / .mp4)
+              <input id="directStreamUrl" type="url" placeholder="https://.../playlist.m3u8" required />
+            </label>
+            <button class="btn btn-secondary" type="submit">Abrir no Player</button>
+          </form>
+        </div>
+
+        <div class="card-panel">
+          <h2>📋 Listas Configuradas</h2>
+          <p class="muted-text">
+            As listas oficiais do projeto aberto <code>iptv-org</code> já vêm ativadas com canais abertos e gratuitos.
+          </p>
+          <div id="playlistsList" class="playlists-list"></div>
+
+          <hr class="divider" />
+
+          <h3>📝 Colar Conteúdo M3U Manualmente</h3>
+          <form id="pasteM3uForm" class="stack-form">
+            <label>
+              Nome da Lista Local
+              <input id="pasteM3uName" type="text" placeholder="Ex: Lista Local" required />
+            </label>
+            <label>
+              Conteúdo (#EXTM3U...)
+              <textarea id="pasteM3uContent" rows="5" placeholder="#EXTM3U&#10;#EXTINF:-1,Meu Canal&#10;https://.../stream.m3u8" required></textarea>
+            </label>
+            <button class="btn btn-secondary" type="submit">Importar Texto M3U</button>
+          </form>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <!-- MODAL DO PLAYER AO VIVO (ESTILO STREAMING) -->
+  <div id="playerModal" class="player-modal hidden" role="dialog" aria-modal="true" aria-labelledby="playerModalTitle">
+    <div class="player-backdrop" id="closePlayerBackdrop"></div>
+    <div class="player-shell">
+      <div class="player-header">
+        <div class="player-title-wrap">
+          <span class="live-pill" id="playerLiveBadge">AO VIVO</span>
+          <div>
+            <h2 id="playerModalTitle">Player</h2>
+            <p id="playerModalSubtitle" class="player-subtitle"></p>
+          </div>
+        </div>
+        <div class="player-header-actions">
+          <select id="qualitySelect" class="select-input compact hidden" aria-label="Qualidade do vídeo">
+            <option value="-1">Qualidade: Auto</option>
+          </select>
+          <button id="copyStreamUrlBtn" class="btn btn-secondary compact hidden" type="button" title="Copiar link do stream para abrir no VLC">
+            📋 Copiar URL (VLC)
+          </button>
+          <button id="closePlayerBtn" class="btn-icon" type="button" aria-label="Fechar player">✕</button>
+        </div>
+      </div>
+
+      <div class="player-body">
+        <div class="video-stage">
+          <video id="videoPlayer" controls playsinline autoplay></video>
+          <div id="playerOverlayMessage" class="player-overlay hidden">
+            <div class="overlay-card">
+              <h3 id="overlayTitle">Selecione um canal para assistir</h3>
+              <p id="overlayDesc">Escolha um dos canais na barra lateral ou cole uma URL .m3u8.</p>
+            </div>
+          </div>
+        </div>
+
+        <aside class="player-sidebar" aria-label="Canais e streams disponíveis">
+          <div class="sidebar-section">
+            <h3>📡 Abrir Stream Direto neste Player</h3>
+            <form id="modalCustomStreamForm" class="inline-stream-form">
+              <input id="modalCustomStreamUrl" type="url" placeholder="Cole uma URL .m3u8 aqui..." required />
+              <button class="btn btn-primary compact" type="submit">Tocar</button>
+            </form>
+          </div>
+
+          <div class="sidebar-section grow">
+            <div class="sidebar-header-row">
+              <h3 id="sidebarChannelsHeading">📺 Canais Sugeridos</h3>
+              <input id="sidebarChannelSearch" type="search" placeholder="Filtrar canal..." class="compact-input" />
+            </div>
+            <div id="sidebarChannelList" class="sidebar-channel-list"></div>
+          </div>
+        </aside>
+      </div>
+    </div>
+  </div>
+
+  <footer class="site-footer">
+    <p>
+      Projeto de estudos • Agenda esportiva via endpoints públicos ESPN • Canais abertos via
+      <a href="https://github.com/iptv-org/iptv" target="_blank" rel="noopener noreferrer">iptv-org/iptv</a>.
+      Streams externos dependem da disponibilidade e CORS da emissora de origem.
+    </p>
+  </footer>
+</body>
+</html>
