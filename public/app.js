@@ -27,14 +27,80 @@ const DEFAULT_PLAYLISTS = [
     builtIn: true,
   },
   {
+    id: 'iptv-org-movies',
+    name: 'Filmes Grátis / Abertos (iptv-org)',
+    url: 'https://iptv-org.github.io/iptv/categories/movies.m3u',
+    tag: 'movies',
+    enabled: true,
+    builtIn: true,
+  },
+  {
+    id: 'iptv-org-series',
+    name: 'Séries Grátis / Abertas (iptv-org)',
+    url: 'https://iptv-org.github.io/iptv/categories/series.m3u',
+    tag: 'series',
+    enabled: true,
+    builtIn: true,
+  },
+  {
+    id: 'iptv-org-entertainment',
+    name: 'Entretenimento Aberto (iptv-org)',
+    url: 'https://iptv-org.github.io/iptv/categories/entertainment.m3u',
+    tag: 'entertainment',
+    enabled: true,
+    builtIn: true,
+  },
+  {
+    id: 'iptv-org-kids',
+    name: 'Infantil & Desenhos (iptv-org)',
+    url: 'https://iptv-org.github.io/iptv/categories/kids.m3u',
+    tag: 'kids',
+    enabled: true,
+    builtIn: true,
+  },
+  {
+    id: 'iptv-org-documentary',
+    name: 'Documentários (iptv-org)',
+    url: 'https://iptv-org.github.io/iptv/categories/documentary.m3u',
+    tag: 'documentary',
+    enabled: true,
+    builtIn: true,
+  },
+  {
     id: 'iptv-org-por',
     name: 'Canais em Português (iptv-org)',
     url: 'https://iptv-org.github.io/iptv/languages/por.m3u',
     tag: 'por',
+    enabled: true,
+    builtIn: true,
+  },
+  {
+    id: 'iptv-org-news',
+    name: 'Notícias ao Vivo (iptv-org)',
+    url: 'https://iptv-org.github.io/iptv/categories/news.m3u',
+    tag: 'news',
+    enabled: false,
+    builtIn: true,
+  },
+  {
+    id: 'free-tv-world',
+    name: 'TV Aberta Mundial (Free-TV/IPTV)',
+    url: 'https://raw.githubusercontent.com/Free-TV/IPTV/master/playlist.m3u8',
+    tag: 'freetv',
     enabled: false,
     builtIn: true,
   },
 ];
+
+const CHANNEL_FILTER_KEYWORDS = {
+  sports: 'sport',
+  movies: 'movie',
+  series: 'series',
+  entertainment: 'entertainment',
+  kids: 'kids',
+  documentary: 'documentary',
+  br: 'brazil',
+};
 
 const ESPN_LEAGUES = [
   { path: 'soccer/bra.1', label: 'Brasileirão Série A' },
@@ -68,7 +134,7 @@ const state = {
   matches: [],
   channels: [],
   isLoadingPlaylists: true,
-  playlists: loadStoredJson(STORAGE_KEYS.playlists, DEFAULT_PLAYLISTS),
+  playlists: mergeBuiltInPlaylists(loadStoredJson(STORAGE_KEYS.playlists, DEFAULT_PLAYLISTS)),
   localRawLists: loadStoredJson(STORAGE_KEYS.localRawM3u, []),
   favorites: new Set(loadStoredJson(STORAGE_KEYS.favorites, [])),
   hlsInstance: null,
@@ -77,6 +143,17 @@ const state = {
 };
 
 // ---------------- Utilitários ----------------
+
+function mergeBuiltInPlaylists(stored) {
+  const list = Array.isArray(stored) ? stored.slice() : [];
+  const existingIds = new Set(list.map((p) => p.id));
+  for (const def of DEFAULT_PLAYLISTS) {
+    if (!existingIds.has(def.id)) {
+      list.push(structuredClone(def));
+    }
+  }
+  return list;
+}
 
 function loadStoredJson(key, fallback) {
   try {
@@ -104,10 +181,22 @@ function escapeHtml(text) {
     .replace(/'/g, '&#39;');
 }
 
+const NON_STREAM_HOSTS = new Set(['youtube.com', 'www.youtube.com', 'youtu.be', 'twitch.tv', 'www.twitch.tv', 'dailymotion.com', 'www.dailymotion.com']);
+
 function isSafeHttpUrl(url) {
   try {
     const parsed = new URL(url);
     return parsed.protocol === 'https:' || parsed.protocol === 'http:';
+  } catch {
+    return false;
+  }
+}
+
+function isDirectStreamUrl(url) {
+  if (!isSafeHttpUrl(url)) return false;
+  try {
+    const host = new URL(url).hostname.toLowerCase();
+    return !NON_STREAM_HOSTS.has(host);
   } catch {
     return false;
   }
@@ -183,7 +272,7 @@ function parseM3U(content, sourceTag = 'custom', sourceName = 'Lista') {
       continue;
     }
 
-    if (isSafeHttpUrl(line)) {
+    if (isDirectStreamUrl(line)) {
       const meta = pendingMeta || {
         name: sourceName,
         logo: '',
@@ -197,7 +286,7 @@ function parseM3U(content, sourceTag = 'custom', sourceName = 'Lista') {
         logo: meta.logo,
         group: meta.group,
         tvgId: meta.tvgId,
-        sourceTag: meta.sourceTag,
+        sourceTags: [meta.sourceTag],
         url: line,
         isHttps: line.startsWith('https://'),
       });
@@ -365,6 +454,21 @@ function renderMatches() {
 
 // ---------------- Carga de Listas IPTV ----------------
 
+function mergeChannelsIntoMap(channelMap, parsedChannels) {
+  for (const ch of parsedChannels) {
+    const existing = channelMap.get(ch.url);
+    if (!existing) {
+      channelMap.set(ch.url, ch);
+      continue;
+    }
+    for (const tag of ch.sourceTags) {
+      if (!existing.sourceTags.includes(tag)) {
+        existing.sourceTags.push(tag);
+      }
+    }
+  }
+}
+
 async function loadAllPlaylists() {
   state.isLoadingPlaylists = true;
   const enabled = state.playlists.filter((p) => p.enabled);
@@ -378,21 +482,13 @@ async function loadAllPlaylists() {
   );
 
   for (const res of fetched) {
-    if (res.status !== 'fulfilled') continue;
-    for (const ch of res.value) {
-      if (!channelMap.has(ch.url)) {
-        channelMap.set(ch.url, ch);
-      }
+    if (res.status === 'fulfilled') {
+      mergeChannelsIntoMap(channelMap, res.value);
     }
   }
 
   for (const localList of state.localRawLists) {
-    const parsed = parseM3U(localList.content, 'local', localList.name);
-    for (const ch of parsed) {
-      if (!channelMap.has(ch.url)) {
-        channelMap.set(ch.url, ch);
-      }
-    }
+    mergeChannelsIntoMap(channelMap, parseM3U(localList.content, 'local', localList.name));
   }
 
   state.channels = Array.from(channelMap.values());
@@ -422,13 +518,14 @@ function populateCategoryFilter() {
 
 function getFilteredChannels() {
   const q = state.searchQuery.trim().toLowerCase();
+  const groupKeyword = CHANNEL_FILTER_KEYWORDS[state.channelFilter];
+
   return state.channels.filter((ch) => {
     if (state.httpsOnly && !ch.isHttps) return false;
     if (state.channelFilter === 'favorites' && !state.favorites.has(ch.url)) return false;
-    if (state.channelFilter === 'sports' && ch.sourceTag !== 'sports' && !ch.group.toLowerCase().includes('sport')) {
+    if (groupKeyword && !ch.sourceTags.includes(state.channelFilter) && !ch.group.toLowerCase().includes(groupKeyword)) {
       return false;
     }
-    if (state.channelFilter === 'br' && ch.sourceTag !== 'br') return false;
     if (state.categoryFilter !== 'all' && ch.group !== state.categoryFilter) return false;
     if (q && !`${ch.name} ${ch.group}`.toLowerCase().includes(q)) return false;
     return true;
@@ -625,7 +722,7 @@ function getSuggestedChannelsForMatch(match) {
     for (const kw of keywords) {
       if (nameLower.includes(kw)) score += 10;
     }
-    if (ch.sourceTag === 'sports' || ch.group.toLowerCase().includes('sport')) score += 3;
+    if (ch.sourceTags.includes('sports') || ch.group.toLowerCase().includes('sport')) score += 3;
     if (state.favorites.has(ch.url)) score += 2;
     return { ch, score };
   });
