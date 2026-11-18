@@ -212,8 +212,16 @@
             <input id="addLinkGroup" type="text" value="Meus Links" placeholder="Ex: Meus Links" />
           </label>
           <label>
-            URL do Stream (.m3u8 / .mp4)
-            <input id="addLinkUrl" type="url" placeholder="https://.../playlist.m3u8" required />
+            URL do Vídeo ou Página (Stream ou Iframe)
+            <input id="addLinkUrl" type="url" placeholder="https://..." required />
+          </label>
+          <label>
+            Modo de Abertura
+            <select id="addLinkMode" class="select-input">
+              <option value="auto">Automático (Stream .m3u8/.mp4 ou &lt;iframe&gt;)</option>
+              <option value="iframe">Incorporar com &lt;iframe&gt;</option>
+              <option value="video">Player Nativo (.m3u8 / .mp4)</option>
+            </select>
           </label>
           <label class="toggle-label inline-check">
             <input type="checkbox" id="addLinkSaveToggle" checked />
@@ -251,6 +259,14 @@
       <div class="player-body">
         <div class="video-stage">
           <video id="videoPlayer" controls playsinline autoplay></video>
+          <iframe
+            id="iframePlayer"
+            class="hidden"
+            title="Player incorporado"
+            allowfullscreen
+            referrerpolicy="no-referrer"
+            allow="autoplay; fullscreen; encrypted-media; picture-in-picture"
+          ></iframe>
           <div id="playerOverlayMessage" class="player-overlay hidden">
             <div class="overlay-card">
               <h3 id="overlayTitle">Selecione um canal para assistir</h3>

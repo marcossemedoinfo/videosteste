@@ -205,6 +205,10 @@ function isDirectStreamUrl(url) {
   }
 }
 
+function isLikelyDirectMediaUrl(url) {
+  return /\.(m3u8|m3u|mp4|webm|ogg|ts)([?#]|$)/i.test(url) || /\/hls\/|m3u8/i.test(url);
+}
+
 function formatDateYmd(offsetDays = 0) {
   const d = new Date();
   d.setDate(d.getDate() + offsetDays);
@@ -497,6 +501,7 @@ async function loadAllPlaylists() {
       tvgId: '',
       sourceTags: ['custom'],
       url: c.url,
+      mode: c.mode || 'auto',
       isHttps: c.url.startsWith('https://'),
       isCustom: true,
     }));
@@ -654,6 +659,13 @@ function destroyHls() {
   const video = document.getElementById('videoPlayer');
   video.removeAttribute('src');
   video.load();
+  video.classList.remove('hidden');
+
+  const iframe = document.getElementById('iframePlayer');
+  if (iframe) {
+    iframe.src = 'about:blank';
+    iframe.classList.add('hidden');
+  }
 }
 
 function showPlayerOverlay(title, desc) {
@@ -666,7 +678,7 @@ function hidePlayerOverlay() {
   document.getElementById('playerOverlayMessage').classList.add('hidden');
 }
 
-function playStream(streamUrl, title = '') {
+function playStream(streamUrl, title = '', explicitMode = 'auto') {
   if (!isSafeHttpUrl(streamUrl)) return;
 
   destroyHls();
@@ -674,6 +686,7 @@ function playStream(streamUrl, title = '') {
   state.currentStreamUrl = streamUrl;
 
   const video = document.getElementById('videoPlayer');
+  const iframe = document.getElementById('iframePlayer');
   const copyBtn = document.getElementById('copyStreamUrlBtn');
   const qualitySelect = document.getElementById('qualitySelect');
 
@@ -688,9 +701,21 @@ function playStream(streamUrl, title = '') {
   // Bloqueio comum de conteúdo misto (stream HTTP em site HTTPS)
   if (window.location.protocol === 'https:' && streamUrl.startsWith('http://')) {
     showPlayerOverlay(
-      'Stream HTTP bloqueado pelo navegador',
-      'Sites em HTTPS não permitem reproduzir links http:// puros diretamente. Escolha um canal com selo HTTPS ou clique em "Copiar URL (VLC)" no topo para abrir no VLC Player.'
+      'Link HTTP bloqueado pelo navegador',
+      'Sites em HTTPS não permitem carregar links http:// puros diretamente. Use um link com https:// ou clique em "Copiar URL (VLC)".'
     );
+    highlightActiveSidebarChannel(streamUrl);
+    return;
+  }
+
+  const savedChannel = state.channels.find((c) => c.url === streamUrl);
+  const mode = explicitMode !== 'auto' ? explicitMode : (savedChannel?.mode || 'auto');
+  const useIframe = mode === 'iframe' || (mode === 'auto' && !isLikelyDirectMediaUrl(streamUrl));
+
+  if (useIframe && iframe) {
+    video.classList.add('hidden');
+    iframe.classList.remove('hidden');
+    iframe.src = streamUrl;
     highlightActiveSidebarChannel(streamUrl);
     return;
   }
@@ -834,7 +859,7 @@ function openChannelPlayer(channel) {
   renderSidebarChannels(allCompatible.length ? allCompatible : state.channels);
 
   modal.classList.remove('hidden');
-  playStream(channel.url, channel.name);
+  playStream(channel.url, channel.name, channel.mode || 'auto');
 }
 
 function closePlayer() {
@@ -1044,6 +1069,7 @@ function setupEventListeners() {
     const title = document.getElementById('addLinkTitle').value.trim() || 'Meu Link';
     const group = document.getElementById('addLinkGroup').value.trim() || 'Meus Links';
     const url = document.getElementById('addLinkUrl').value.trim();
+    const mode = document.getElementById('addLinkMode').value || 'auto';
     const shouldSave = document.getElementById('addLinkSaveToggle').checked;
     if (!isSafeHttpUrl(url)) return;
 
@@ -1051,21 +1077,25 @@ function setupEventListeners() {
       name: title,
       group,
       url,
+      mode,
       isHttps: url.startsWith('https://'),
       isCustom: true,
     };
 
     if (shouldSave) {
-      const exists = state.customChannels.some((c) => c.url === url);
-      if (!exists) {
-        state.customChannels.unshift({ name: title, group, url });
-        saveStoredJson(STORAGE_KEYS.customChannels, state.customChannels);
+      const existingIdx = state.customChannels.findIndex((c) => c.url === url);
+      if (existingIdx >= 0) {
+        state.customChannels[existingIdx] = { name: title, group, url, mode };
+      } else {
+        state.customChannels.unshift({ name: title, group, url, mode });
       }
+      saveStoredJson(STORAGE_KEYS.customChannels, state.customChannels);
       await loadAllPlaylists();
     }
 
     e.target.reset();
     document.getElementById('addLinkGroup').value = 'Meus Links';
+    document.getElementById('addLinkMode').value = 'auto';
     document.getElementById('addLinkSaveToggle').checked = true;
     closeAddLink();
     openChannelPlayer(channelObj);
